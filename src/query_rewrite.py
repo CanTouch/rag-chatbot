@@ -1,9 +1,12 @@
-"""Rewrite a user's query into 2-3 search-friendly variants using a local LLM."""
+"""Rewrite a user's query into 2-3 search-friendly variants using Groq."""
 import json
-import requests
+import os
+from dotenv import load_dotenv
+from groq import Groq
 
-OLLAMA_URL = "http://localhost:11434/api/generate"
-REWRITE_MODEL = "llama3.2:3b"
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), "..", ".env"))
+client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+REWRITE_MODEL = "qwen/qwen3.8-27b"
 
 REWRITE_PROMPT = """You are a search query rewriter for a technical paper retrieval system.
 Given a user's question, generate 2 alternative phrasings that use more precise,
@@ -19,16 +22,13 @@ JSON array:"""
 
 def rewrite_query(query):
     prompt = REWRITE_PROMPT.format(query=query)
-    resp = requests.post(OLLAMA_URL, json={
-        "model": REWRITE_MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "options": {"temperature": 0.3},
-    })
-    resp.raise_for_status()
-    raw = resp.json()["response"].strip()
+    response = client.chat.completions.create(
+        model=REWRITE_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+    )
+    raw = response.choices[0].message.content.strip()
 
-    # LLMs sometimes wrap JSON in markdown fences -- strip those defensively
     if raw.startswith("```"):
         raw = raw.strip("`").replace("json", "", 1).strip()
 
@@ -39,8 +39,6 @@ def rewrite_query(query):
     except json.JSONDecodeError:
         pass
 
-    # If parsing fails, honestly fall back to just the original query rather than
-    # silently guessing at malformed output
     print(f"  [rewrite parse failed, raw output: {raw!r}]")
     return [query]
 

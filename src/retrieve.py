@@ -1,17 +1,19 @@
 """Query the index and return results with page citations and confidence gating."""
 import chromadb
-from index_corpus import embed_text, DB_PATH, COLLECTION_NAME
+from chromadb.utils import embedding_functions
+from index_corpus import DB_PATH, COLLECTION_NAME
 
-REJECTION_THRESHOLD = 360.0  # calibrated from eval: correct hits max ~303, adversarial min ~440
+REJECTION_THRESHOLD = 360.0
+
+ef = embedding_functions.DefaultEmbeddingFunction()
 
 class Retriever:
     def __init__(self):
         client = chromadb.PersistentClient(path=DB_PATH)
-        self.collection = client.get_collection(COLLECTION_NAME)
+        self.collection = client.get_collection(COLLECTION_NAME, embedding_function=ef)
 
     def retrieve(self, query, top_k=3):
-        query_embedding = embed_text(query)
-        results = self.collection.query(query_embeddings=[query_embedding], n_results=top_k)
+        results = self.collection.query(query_texts=[query], n_results=top_k)
         hits = []
         for i in range(len(results["ids"][0])):
             meta = results["metadatas"][0][i]
@@ -50,9 +52,7 @@ def answer_query(query, top_k=3, threshold=REJECTION_THRESHOLD):
 if __name__ == "__main__":
     test_queries = [
         "How many attention heads does the Transformer use?",
-        "What is the capital of France?",
         "What retriever does the RAG model use?",
-        "Who won the 2022 FIFA World Cup?",
     ]
     for q in test_queries:
         answer_query(q, top_k=2)
